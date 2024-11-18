@@ -1,11 +1,13 @@
 import socket
 import base64
 import struct
+import os
 
 MAGIC_SOF = b'---SOF---'
 MAGIC_EOF = b'---EOF---'
 HOST = 'localhost'
 PORT = 1053
+DIR_OUT ="..\\output\\"
 
 
 def int_to_bytes(value: int, number:int) -> bytes:
@@ -128,51 +130,60 @@ def extract_strings(bin_data:bytes) -> str:
 
     return "".join(result)
 
-# main
+if __name__=='__main__':
 
-data_array = bytearray()
-filename = ""
 
-# create UDP socket
-with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-    sock.bind((HOST, PORT))
+    data_array = bytearray()
+    file_in = ""
 
-    # main loop
-    while True:
-        data, addr = sock.recvfrom(1024)
+    # create UDP socket
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind((HOST, PORT))
 
-        # debug echo        
-        #print("data received: %s" %data)
-        # build answer
-        sock.sendto(data, addr)
+        # main loop
+        while True:
+            data, addr = sock.recvfrom(1024)
 
-        # command received: start of file transfer
-        if MAGIC_SOF in data:
-            filename = extract_strings(data[22:])
-#            print("New incoming file: %s" %filename)    
-
-        # command received: end of file transfer
-        elif MAGIC_EOF in data:
-            filename_out = "recv_" + filename
-#            print("File transfer finished. Creating new file: %s" %filename_out) 
-            # stop server after file transfer
-            break
-        
-        # no cammnd received: catch payload
-        else:
+            # debug echo        
             #print("data received: %s" %data)
-            data = bytearray(data)
-            # extract payload: remove header and trailer
-            data_array += data[12:-5]
+            # build answer
+            sock.sendto(data, addr)
 
+            # command received: start of file transfer
+            if MAGIC_SOF in data:
+                file_in = extract_strings(data[22:])
+                print("Filetransfer requested.")
+                print("Incoming file: %s" %(file_in))
+    #            print("New incoming file: %s" %filename)    
 
-print("All data received. Writing data to file %s ..." %(filename_out))
-payload: bytearray = extract_data(data_array)
-#print(payload)
-payload_decoded: bytes = base64.urlsafe_b64decode(payload)
-#print(payload_decoded)
+            # command received: end of file transfer
+            elif MAGIC_EOF in data:
+                print("Filetransfer finished.")
+                file_out = "recv_" + file_in
+    #            print("File transfer finished. Creating new file: %s" %filename_out) 
+                # stop server after file transfer
+                break
+            
+            # no cammnd received: catch payload
+            else:
+                #print("data received: %s" %data)
+                data = bytearray(data)
+                # extract payload: remove header and trailer
+                data_array += data[12:-5]
 
-with open(filename_out, 'wb') as fobj:
-    fobj.write(payload_decoded)
+    
+    file_out = DIR_OUT + file_out
+    print("All data received. Writing data to file %s ..." %(file_out))
+    payload: bytearray = extract_data(data_array)
+    #print(payload)
+    payload_decoded: bytes = base64.urlsafe_b64decode(payload)
+    #print(payload_decoded)
+
+    try:
+        os.makedirs(DIR_OUT, exist_ok=True)
+        with open(file_out, 'wb') as fobj:
+            fobj.write(payload_decoded)
+    except Exception as e:
+        print("An error occured: %s" %(e))
 
 

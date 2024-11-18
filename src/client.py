@@ -21,6 +21,8 @@ import socket
 import random
 import struct
 import base64
+import sys
+import re
 
 S_HOST = 'localhost'
 S_PORT = 1053
@@ -29,9 +31,6 @@ MAX_INT_BYTE = 65535
 LEN_MAX_CHUNK = 62
 MAGIC_SOF = b'---SOF---'
 MAGIC_EOF = b'---EOF---'
-
-#readfile = "input.txt"
-readfile = "pic.png"
 
 
 def int_to_bytes(value: int, number:int) -> bytes:
@@ -120,7 +119,7 @@ def gen_bytes_dns_query_from_filename(name:str) -> bytearray:
     
     return data
 
-def gen_magic_data(magic:bytes) -> bytearray:
+def gen_magic_data(magic:bytes, filename:str) -> bytearray:
     """generate magic string in DNS query format
 
     Args:
@@ -134,7 +133,7 @@ def gen_magic_data(magic:bytes) -> bytearray:
     data = bytearray()
     data += int_to_bytes(len(magic),1)
     data += magic
-    data += gen_bytes_dns_query_from_filename(readfile)
+    data += gen_bytes_dns_query_from_filename(filename)
     return data
 
 
@@ -178,7 +177,6 @@ def gen_data_chunks(bin_data:bytes) -> list[bytearray]:
         
         # maximum length reached
         if i_bytes == LEN_MAX_CHUNK:
-            print(len(curr_bytes))
             curr_bytes = bytearray(int_to_bytes(i_bytes, 1)) + curr_bytes
             result.append(curr_bytes)
             curr_bytes = bytearray()
@@ -188,29 +186,7 @@ def gen_data_chunks(bin_data:bytes) -> list[bytearray]:
     curr_bytes = bytearray(int_to_bytes(i_bytes, 1)) + curr_bytes
     result.append(curr_bytes)
 
-    #print(result)
     return result
-
-# def rejoin_chunks(chunks) -> bytearray:
-#     data_stream = bytearray()
-#     for chunk in chunks:
-#         data_stream += chunk
-
-#     payload = bytearray()
-#     to_read = data_stream[0]
-#     for byte  in data_stream:
-#         #print(to_read)
-#         if byte == b'\x00' or byte == 0:
-#             break
-#         if to_read == 0:
-#             print(payload)
-#             to_read = int(byte)
-#             continue
-#         payload.append(byte)
-#         to_read -= 1
-    
-# #    print(payload)
-#     return payload
 
 def build_chunk_packets(chunks:list[bytearray]) -> list[bytearray]:
     """join maximum four chunks in packets
@@ -232,66 +208,79 @@ def build_chunk_packets(chunks:list[bytearray]) -> list[bytearray]:
     
     result.append(packet)
     return result
+
+
+if __name__ == '__main__':
+    
+    try:
+        file_in: str = sys.argv[1]
+    except:
+        print("ERROR: no input file given.")
+        print("Usage: dnstunnel <file>")
+        sys.exit()
+    
+    input_data = bytearray()
+
+    try:
         
-
-
-input_data = bytearray()
-
-with open(readfile, 'rb') as fobj:    
-    input_data: bytes = fobj.read()
-
-# encode data with base64url
-data_encoded: bytes = base64.urlsafe_b64encode(input_data)
-
-# list of chunks (<=63 Byte each)
-chunk_list: list[bytearray] = gen_data_chunks(data_encoded)
+        with open(file_in, 'rb') as fobj:    
+            input_data +=  fobj.read()
     
-    
-    
+    except IOError:
+        print("File %s does not exist or you don't have access rights" %(file_in))
+        sys.exit()
+    except:
+        print("An unknown Error occured")
+        sys.exit()
 
+    file_in_name = re.split(r'[/\\]+', file_in)[-1]
+    file_in_name = file_in_name.replace(" ", "_")
+    
+    # encode data with base64url
+    data_encoded: bytes = base64.urlsafe_b64encode(input_data)
 
-# create UDP socket
-with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-    sock.connect((S_HOST, S_PORT))
-    sock.settimeout(5)
+    # list of chunks (<=63 Byte each)
+    chunk_list: list[bytearray] = gen_data_chunks(data_encoded)
 
-    print("Start to send %s to %s:%i" %(readfile, S_HOST, S_PORT))
-    start_msg: bytearray = gen_magic_data(MAGIC_SOF)
-    payload: bytearray = build_dns_packet(start_msg) 
-    
-    # send SOF command to server
-    sock.send(payload)
-    
-    packets: list[bytearray] = build_chunk_packets(chunk_list)
-    
-    print("%i packets to send." %(len(packets)))
-    
-    for i, packet in enumerate(packets, start=1):
-        payload = build_dns_packet(packet)
+    # create UDP socket
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.connect((S_HOST, S_PORT))
+            sock.settimeout(5)
+        except socket.error as exc:
+            print("Caught exception socket.error : %s" %(exc))
+
+        print("Start to send %s to %s:%i" %(file_in_name, S_HOST, S_PORT))
+        start_msg: bytearray = gen_magic_data(MAGIC_SOF, file_in_name)
+        payload: bytearray = build_dns_packet(start_msg) 
         
-        # print("Send packet %i" %(i) )
-        
-        # send data    
+        # send SOF command to server
         sock.send(payload)
-    
-    # sock.send(message)
-    # response, addr = sock.recvfrom(1024)
-    # print(response)
+        
+        packets: list[bytearray] = build_chunk_packets(chunk_list)
+        
+        print("%i packets to send." %(len(packets)))
+        
+        for i, packet in enumerate(packets, start=1):
+            payload = build_dns_packet(packet)
+            
+            # print("Send packet %i" %(i) )
+            
+            # send data    
+            sock.send(payload)
+        
+        # sock.send(message)
+        # response, addr = sock.recvfrom(1024)
+        # print(response)
 
-    
-    print("Finished.")
-    end_msg = gen_magic_data(MAGIC_EOF)
-    payload = build_dns_packet(end_msg) 
-    
-    # send EOF command to server
-    sock.send(payload)
-    
-    # response, addr = sock.recvfrom(1024)
-    # print(response)
-
-    # sock.send(message)
-    # response, addr = sock.recvfrom(1024)
-
-    # print(response)
-    
-    
+        
+        print("File transfer finished.")
+        end_msg = gen_magic_data(MAGIC_EOF, file_in_name)
+        payload = build_dns_packet(end_msg) 
+        
+        # send EOF command to server
+        sock.send(payload)
+        
+    print("NORMAL TERMINATION")
+        
+        
