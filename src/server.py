@@ -2,12 +2,13 @@ import socket
 import base64
 import struct
 import os
+import hashlib
 
-MAGIC_SOF = b'---SOF---'
-MAGIC_EOF = b'---EOF---'
-HOST = 'localhost'
-PORT = 1053
-DIR_OUT ="..\\output\\"
+MAGIC_SOF: bytes = b'---SOF---'
+MAGIC_EOF: bytes = b'---EOF---'
+HOST: str = 'localhost'
+PORT: int = 1053
+DIR_OUT: str ="..\\output\\"
 
 
 def int_to_bytes(value: int, number:int) -> bytes:
@@ -36,7 +37,7 @@ def gen_header(bin_data:bytes) -> bytearray:
     """generate header for dns packet:
     16 Bit: random query id
     16 Bit: flags - standard query
-    16 Bit: QDCOUNT - 0 question
+    16 Bit: QDCOUNT - 1 question
     16 Bit: ANCOUNT - 1 answer
     16 Bit: NSCOUNT - 0 name server RR
     16 Bit: ARCOUNT - 0 additional records
@@ -47,9 +48,9 @@ def gen_header(bin_data:bytes) -> bytearray:
     
     header = bytearray()
 
-    id: bytes = get_id(bin_data)
-    flags = b'\x01\x00'
-    qdcount  = b'\x00\x00'
+    id: bytes = bin_data[0:2]
+    flags = b'\x81\x80'
+    qdcount  = b'\x00\x01'
     ancount  = b'\x00\x01'
     nscount  = b'\x00\x00'
     arcount  = b'\x00\x00'
@@ -62,23 +63,6 @@ def gen_header(bin_data:bytes) -> bytearray:
     header += arcount
     return header
 
-def gen_trailer() -> bytes:
-    """add trailing bytes for dns packet:
-    0x00 - terminate query
-    0x0001 - QTYPE 'A': IPv4-Adress
-    0x0001 - QCLASS 'IN': Intenet
-
-    Returns:
-        bytes: footer of dns packet
-    """
-    return bytes(b'\00\00\x01\x00\x01')
-    
-
-
-
-def get_id(bin_data:bytes) -> bytes:
-    return int_to_bytes(bin_data[0],1)
-
 def extract_data(data_stream:bytearray) -> bytearray:
     """remove length bytes from byte stream
      
@@ -90,8 +74,9 @@ def extract_data(data_stream:bytearray) -> bytearray:
         bytearray: raw data 
     """
     payload = bytearray()
+    
     # to_read: length of label
-    to_read = data_stream[0]
+    to_read: int = data_stream[0]
     for byte in data_stream[1:]:
         if to_read == 0:
             to_read = int(byte)
@@ -111,14 +96,13 @@ def extract_strings(bin_data:bytes) -> str:
     Returns:
         str: filename
     """
-    result:list[str] = []
+    result: list[str] = []
     
     # current_len: length of chars to read
     current_len: int = bin_data[0]
     i = 0
     for byte in bin_data[1:]:
         if i < current_len:
-            # print(byte)
             result.append(chr(byte))
             i += 1
         elif byte == 0:
@@ -130,59 +114,127 @@ def extract_strings(bin_data:bytes) -> str:
 
     return "".join(result)
 
+
+def gen_answer(hash_value:bytes, msg_counter:int) -> bytearray:
+    """build answer fields
+        
+        name: identifier for answer name section, 0x0c: Offset 12 Byte from start of query section -> skip header
+        resp_type: 'AAAA'
+        resp_class: IN
+        ttl: ttl used for received packet number: value is mod(2^32) to ensure 4Byte length
+        data_length: 128 Bit = 16 Byte (only use first 16 Byte)
+
+    Args:
+        hash_value (bytes): 128 Bit hashvalue 
+        msg_counter (int): 32 bit integer
+
+    Returns:
+        bytearray: _description_
+    """
+
+    response = bytearray()
+    # 0xc0: identifier for answer name section, 0x0c: Offset 12 Byte from start of query section -> skip header
+    name: bytes = bytes(b'\xc0\x0c')
+    # AAAA
+    resp_type: bytes = bytes(b'\x00\x1c') 
+    # IN
+    resp_class: bytes = bytes(b'\x00\x01')
+    # ttl used for received packet number
+    ttl: bytes = int_to_bytes(msg_counter%pow(2,32), 4 )
+    # 128 Bit = 16 Byte
+    data_length: bytes = bytes(b'\x00\x10')
+    # hashvalue bytes
+    
+    
+    address: bytes = hash_value[:16]
+    
+    response += name
+    response += resp_type
+    response += resp_class
+    response += ttl
+    response += data_length
+    response += address
+    
+    return response
+    
+def build_response_packet(header:bytes, query:bytes, answer:bytearray) -> bytearray:
+    response: bytearray = bytearray()
+    
+    response += header
+    response += query
+    response += answer
+    
+    return response
+    
+    
+    
 if __name__=='__main__':
+    """server implementation of dnstunnel
+
+    """
 
 
-    data_array = bytearray()
-    file_in = ""
+    data_array: bytearray = bytearray()
+    file_in: str = ""
 
     # create UDP socket
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.bind((HOST, PORT))
 
         # main loop
+        counter: int = 0
+        response_header: bytearray = bytearray()
+
         while True:
             data, addr = sock.recvfrom(1024)
-
-            # debug echo        
-            #print("data received: %s" %data)
-            # build answer
-            sock.sendto(data, addr)
+            if not counter:
+                response_header += gen_header(data)
 
             # command received: start of file transfer
             if MAGIC_SOF in data:
-                file_in = extract_strings(data[22:])
-                print("Filetransfer requested.")
+                file_in: str = extract_strings(data[22:])
+                
+                print("Filetransfer requested from %s:%i" %(addr[0], addr[1]))
                 print("Incoming file: %s" %(file_in))
-    #            print("New incoming file: %s" %filename)    
 
             # command received: end of file transfer
             elif MAGIC_EOF in data:
                 print("Filetransfer finished.")
+                
                 file_out = "recv_" + file_in
-    #            print("File transfer finished. Creating new file: %s" %filename_out) 
+
                 # stop server after file transfer
                 break
             
             # no cammnd received: catch payload
             else:
-                #print("data received: %s" %data)
-                data = bytearray(data)
                 # extract payload: remove header and trailer
-                data_array += data[12:-5]
+                data_array += bytearray(data[12:-5])
+
+            # compute sha256-hash (128bit) from payload
+            data_hash: bytes = hashlib.sha256(data[12:-5]).digest()[:16] 
+            
+            # response = data + hash
+            response: bytearray = build_response_packet(header=response_header, query=data[12:], answer=gen_answer(data_hash, counter))
+            
+            sock.sendto(response, addr)
+            counter += 1
+            
 
     
-    file_out = DIR_OUT + file_out
+    file_out: str = DIR_OUT + file_out
+
     print("All data received. Writing data to file %s ..." %(file_out))
+
     payload: bytearray = extract_data(data_array)
-    #print(payload)
     payload_decoded: bytes = base64.urlsafe_b64decode(payload)
-    #print(payload_decoded)
 
     try:
         os.makedirs(DIR_OUT, exist_ok=True)
-        with open(file_out, 'wb') as fobj:
+        
+        with open(file=file_out, mode='wb') as fobj:
             fobj.write(payload_decoded)
+            
     except Exception as e:
         print("An error occured: %s" %(e))
 
