@@ -13,5 +13,9 @@ dnstunnel implements a data tunnel via DNS over UDP.
 V0.1 first working product:
   - supports all filetypes
   - send content of the file via valid dns packages from source to target
-  - packages are echo'ed to check the correct transmission
-  - packeges will be resent if the echo was different from the sent package
+  - packages are echo'd
+
+V0.2 improved functionality:
+  - server respond to query with valid DNS packet
+  - SHA-256 hash validation of echo'd packets
+  - waiting for response to ensure correct order
