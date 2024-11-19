@@ -18,6 +18,7 @@ dnstunnel implements a data tunnel via DNS over UDP.
   - change server host: S_HOST
   - change server port: S_PORT
 
+
 ## Versions
 
 V0.1 first working product:
@@ -32,4 +33,19 @@ V0.2 improved functionality:
 
 V0.3 Bug fix:
   - response id is now updated and is taken from query
+
+
+## Requirements
+
+`python3`
+
+# Usage
+
+1. copy `server.py` to prefered location where the file shall be transfered to
+2. copy `client.py` to prefered location
+3. modify `server.py`: Variable `HOST` to the host address of the server machine
+4. modify `server.py`: Variable `DIR_OUT` to the directory, the transfered file shall be written
+5. modify `client.py`: Variable `S_HOST` to the host address of the server machine
+6. run `python server.py`
+7. run `python client.py <file>` where `<file>` specified the path to the file which shall be transfered
 
