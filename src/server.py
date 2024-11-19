@@ -33,7 +33,7 @@ def int_to_bytes(value: int, number:int) -> bytes:
     
     return struct.pack('>I', value)
 
-def gen_header(bin_data:bytes) -> bytearray:
+def gen_default_header() -> bytearray:
     """generate header for dns packet:
     16 Bit: random query id
     16 Bit: flags - standard query
@@ -48,14 +48,14 @@ def gen_header(bin_data:bytes) -> bytearray:
     
     header = bytearray()
 
-    id: bytes = bin_data[0:2]
-    flags = b'\x81\x80'
-    qdcount  = b'\x00\x01'
-    ancount  = b'\x00\x01'
-    nscount  = b'\x00\x00'
-    arcount  = b'\x00\x00'
+    id_pack: bytes = b'\x81\x80'
+    flags: bytes = b'\x81\x80'
+    qdcount: bytes = b'\x00\x01'
+    ancount: bytes = b'\x00\x01'
+    nscount: bytes = b'\x00\x00'
+    arcount: bytes = b'\x00\x00'
 
-    header += id
+    header += id_pack
     header += flags
     header += qdcount
     header += ancount
@@ -183,12 +183,13 @@ if __name__=='__main__':
 
         # main loop
         counter: int = 0
-        response_header: bytearray = bytearray()
+        response_header: bytearray = gen_default_header()
 
         while True:
             data, addr = sock.recvfrom(1024)
-            if not counter:
-                response_header += gen_header(data)
+            
+            # update header id            
+            response_header[:2] = data[:2]
 
             # command received: start of file transfer
             if MAGIC_SOF in data:
