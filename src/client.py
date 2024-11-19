@@ -31,7 +31,7 @@ S_PORT: int = 1053
 
 MAX_INT_BYTE: int = 65535
 LEN_MAX_CHUNK: int = 62
-TIMEOUT = 5
+TIMEOUT: int = 5
 MAGIC_SOF: bytes = b'---SOF---'
 MAGIC_EOF: bytes = b'---EOF---'
 
@@ -274,6 +274,20 @@ def response_is_valid(data_sent:bytearray, data_recv:bytes, counter:int) -> bool
     
     print("WARNING: Hash value of packet %i didn't match" %(counter))
     return False
+
+def wait_for_response() -> None:
+    time_start: float = time.time()
+    while(True):
+        if (time_start + TIMEOUT < time.time()):
+            print("WARNING: Timeout at packet %i" %(counter))
+            break
+        
+        response: bytes = sock.recv(1024)
+        
+        if not response_is_valid(data_sent=payload, data_recv=response, counter=counter):
+            print("Warning: at packet %i a failure occured!" %(counter))
+        
+        break
     
 
 if __name__ == '__main__':
@@ -326,16 +340,16 @@ if __name__ == '__main__':
         sock.send(payload)
 
         # check response        
-        time_start: float = time.time()
-        while(True):
-            if (time_start + TIMEOUT < time.time()):
-                print("WARNING: Timeout at packet %i" %(counter))
-                break
+        wait_for_response()
+        # while(True):
+            # if (time_start + TIMEOUT < time.time()):
+            #     print("WARNING: Timeout at packet %i" %(counter))
+            #     break
 
-            response: bytes = sock.recv(1024)
-            if not response_is_valid(data_sent=payload, data_recv=response, counter=counter):
-                print("Warning: at packet %i a failure occured!" %(counter))
-            break
+            # response: bytes = sock.recv(1024)
+            # if not response_is_valid(data_sent=payload, data_recv=response, counter=counter):
+            #     print("Warning: at packet %i a failure occured!" %(counter))
+            # break
         
         counter += 1
         
@@ -354,21 +368,9 @@ if __name__ == '__main__':
             sock.send(payload)
 
             # check response        
-            while(1):
-                # time.sleep(0.5)
-                response: bytes = sock.recv(1024)
-                if not response_is_valid(data_sent=payload, data_recv=response, counter=counter):
-                    print("Warning: at packet %i a failure occured!" %(counter))
-                break
-                # response: bytes = sock.recv(1024)
+            wait_for_response()                
+            
             counter += 1
-        
-
-        
-        # sock.send(message)
-        # response, addr = sock.recvfrom(1024)
-        # print(response)
-
         
         print("File transfer finished.")
         end_msg = gen_magic_data(MAGIC_EOF, file_in_name)
@@ -377,14 +379,6 @@ if __name__ == '__main__':
         # send EOF command to server
         sock.send(payload)
         counter += 1
-        # check response        
-        # while(1):
-        #     time.sleep(0.5)
-        #     response: bytes = sock.recv(1024)
-        #     if not response_is_valid(data_sent=payload, data_recv=response, counter=counter):
-        #         print("Warning: at packet %i a failure occured!" %(counter))
-        #     break
-        # response: bytes = sock.recv(1024)
         
 
         
