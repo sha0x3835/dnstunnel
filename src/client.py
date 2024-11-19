@@ -27,7 +27,7 @@ import hashlib
 import time
 
 S_HOST: str = 'localhost'
-S_PORT: int = 1053
+S_PORT: int = 53
 
 MAX_INT_BYTE: int = 65535
 LEN_MAX_CHUNK: int = 62
@@ -277,6 +277,7 @@ def response_is_valid(data_sent:bytearray, data_recv:bytes, counter:int) -> bool
 
 def wait_for_response() -> None:
     time_start: float = time.time()
+    
     while(True):
         if (time_start + TIMEOUT < time.time()):
             print("WARNING: Timeout at packet %i" %(counter))

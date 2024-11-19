@@ -7,7 +7,7 @@ import hashlib
 MAGIC_SOF: bytes = b'---SOF---'
 MAGIC_EOF: bytes = b'---EOF---'
 HOST: str = 'localhost'
-PORT: int = 1053
+PORT: int = 53
 DIR_OUT: str ="..\\output\\"
 
 
