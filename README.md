@@ -8,10 +8,25 @@ This tool is for educational purposes only. Use this tool only at your own syste
 
 dnstunnel implements a data tunnel via DNS over UDP. 
 
+## Needed modifications
+
+- server.py:
+  - change output directory: DIR_OUT
+  - change host: HOST
+  - change port: PORT
+- client.py
+  - change server host: S_HOST
+  - change server port: S_PORT
+
 ## Versions
 
 V0.1 first working product:
   - supports all filetypes
   - send content of the file via valid dns packages from source to target
-  - packages are echo'ed to check the correct transmission
-  - packeges will be resent if the echo was different from the sent package
+  - packages are echo'd
+
+V0.2 improved functionality:
+  - server respond to query with valid DNS packet
+  - SHA-256 hash validation of echo'd packets
+  - waiting for response to ensure correct order
+
