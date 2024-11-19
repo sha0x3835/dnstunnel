@@ -30,3 +30,6 @@ V0.2 improved functionality:
   - SHA-256 hash validation of echo'd packets
   - waiting for response to ensure correct order
 
+V0.3 Bug fix:
+  - response id is now updated and is taken from query
+
